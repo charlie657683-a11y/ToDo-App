@@ -1,0 +1,649 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f7fb">
+  <title>ToDoリスト</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
+      color: #202938;
+      background: #f5f7fb;
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+      --muted: #697586;
+      --line: #e5eaf1;
+      --primary: #315bd6;
+      --primary-dark: #2448b5;
+      --surface: #fff;
+    }
+
+    * { box-sizing: border-box; }
+    body { margin: 0; min-width: 320px; }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+    .app { width: min(1120px, calc(100% - 40px)); margin: 0 auto; padding: 38px 0 56px; }
+    .topbar, .heading, .toolbar, .task-top, .task-footer, .dialog-actions {
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    }
+    .brand { display: flex; align-items: center; gap: 13px; }
+    .brand-mark {
+      display: grid; place-items: center; width: 44px; height: 44px; border-radius: 14px;
+      color: #fff; background: var(--primary); font-size: 23px; font-weight: 700;
+      box-shadow: 0 7px 18px #315bd633;
+    }
+    h1 { margin: 0; font-size: 22px; letter-spacing: .02em; }
+    .subtitle { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
+    .actions { display: flex; gap: 10px; }
+    .button {
+      display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px;
+      padding: 0 15px; border: 1px solid var(--line); border-radius: 9px; background: #fff;
+      color: #344054; font-weight: 650; transition: background .15s, border-color .15s;
+    }
+    .button:hover { background: #f7f9fc; border-color: #cbd4e1; }
+    .button.primary { color: #fff; border-color: var(--primary); background: var(--primary); }
+    .button.primary:hover { background: var(--primary-dark); }
+    .button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible {
+      outline: 3px solid #315bd64d; outline-offset: 2px;
+    }
+    .heading { margin-top: 42px; align-items: end; }
+    .heading h2 { margin: 0; font-size: 24px; }
+    .heading p { margin: 7px 0 0; color: var(--muted); font-size: 13px; }
+    .storage-note { color: #677386; font-size: 12px; white-space: nowrap; }
+    .storage-note::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: #28a879; }
+
+    .toolbar { justify-content: start; margin: 24px 0 16px; padding: 13px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+    .search-wrap { position: relative; flex: 1; min-width: 180px; }
+    .search-wrap::before { content: "⌕"; position: absolute; top: 7px; left: 12px; color: #8994a5; font-size: 20px; }
+    .search { width: 100%; padding-left: 37px !important; }
+    .field-control {
+      width: 100%; min-height: 40px; padding: 8px 11px; border: 1px solid #dce2eb; border-radius: 8px;
+      background: #fff; color: #344054;
+    }
+    .toolbar select { width: auto; min-width: 145px; }
+    .task-list { display: grid; grid-template-columns: 1fr; gap: 14px; }
+    .task-card { min-width: 0; padding: 19px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: 0 2px 7px #20304a08; }
+    .task-top { align-items: start; }
+    .task-title { margin: 0; overflow-wrap: anywhere; font-size: 16px; line-height: 1.5; }
+    .category { flex: 0 0 auto; max-width: 45%; overflow: hidden; padding: 4px 9px; border-radius: 99px; background: #edf2ff; color: #3156b9; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+    .task-memo { min-height: 20px; margin: 9px 0 16px; color: var(--muted); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .scores { display: flex; flex-wrap: wrap; gap: 8px; }
+    .score { padding: 5px 8px; border-radius: 6px; background: #f4f6f9; color: #586578; font-size: 11px; }
+    .score strong { margin-left: 4px; color: #293446; font-size: 12px; }
+    .task-footer { margin-top: 17px; padding-top: 14px; border-top: 1px solid #eef1f5; }
+    .progress-select { width: auto; min-height: 34px; padding: 5px 28px 5px 9px; font-size: 12px; }
+    .print-status, .print-caption { display: none; }
+    .card-actions { display: flex; gap: 8px; }
+    .text-button { padding: 5px 7px; border: 0; background: transparent; color: #596579; font-size: 12px; }
+    .text-button:hover { color: var(--primary); }
+    .text-button.danger:hover { color: #c03535; }
+    .empty { grid-column: 1 / -1; padding: 58px 20px; border: 1px dashed #cdd5e1; border-radius: 12px; color: var(--muted); text-align: center; }
+    .empty strong { display: block; margin-bottom: 8px; color: #344054; font-size: 16px; }
+    .message { margin: 18px 0; padding: 12px 15px; border-radius: 9px; font-size: 13px; }
+    .message.error { border: 1px solid #f2c7c7; background: #fff3f3; color: #a32929; }
+    .message.success { border: 1px solid #b8e5cf; background: #effaf4; color: #176b42; }
+    .hidden { display: none !important; }
+    dialog { width: min(540px, calc(100% - 32px)); max-height: min(90vh, 780px); padding: 0; border: 0; border-radius: 14px; box-shadow: 0 20px 70px #10213d40; }
+    dialog::backdrop { background: #18253a80; backdrop-filter: blur(2px); }
+    .dialog-inner { padding: 24px; }
+    .dialog-inner h2 { margin: 0 0 21px; font-size: 20px; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+    .form-field { display: grid; gap: 7px; color: #485568; font-size: 12px; font-weight: 650; }
+    .form-field.full { grid-column: 1 / -1; }
+    .form-field textarea { min-height: 92px; resize: vertical; }
+    .dialog-actions { justify-content: end; margin-top: 23px; }
+    .file-input { display: none; }
+    @media (max-width: 760px) {
+      .app { width: min(100% - 28px, 600px); padding-top: 23px; }
+      .topbar { align-items: start; }
+      .topbar, .heading { flex-wrap: wrap; }
+      .actions { flex-wrap: wrap; }
+      .actions .button { padding: 0 11px; }
+      .heading { margin-top: 32px; }
+      .storage-note { white-space: normal; }
+      .toolbar { flex-wrap: wrap; }
+      .search-wrap { flex-basis: 100%; }
+      .toolbar select { flex: 1; min-width: 0; }
+    }
+    @media (max-width: 420px) {
+      .brand-mark { width: 38px; height: 38px; }
+      h1 { font-size: 19px; }
+      .actions { width: 100%; }
+      .actions .button { flex: 1; }
+      .form-grid { grid-template-columns: 1fr; }
+      .form-field.full { grid-column: auto; }
+    }
+    @page { size: A4 portrait; margin: 12mm; }
+    @media print {
+      body { min-width: 0; background: #fff; color: #111; }
+      .app { width: 100%; margin: 0; padding: 0; }
+      .topbar, .toolbar, #message, #suggestion-note, .storage-note, .card-actions, .progress-select { display: none !important; }
+      .heading { margin: 0 0 5mm; }
+      .heading h2 { font-size: 18pt; }
+      .heading p.print-caption { display: block; margin-top: 2mm; font-size: 9pt; }
+      .task-list { gap: 2mm; }
+      .task-card {
+        height: 45mm; padding: 3mm; overflow: hidden; border: 1px solid #cbd2dc;
+        border-radius: 2mm; box-shadow: none; break-inside: avoid; page-break-inside: avoid;
+      }
+      .task-title {
+        display: -webkit-box; overflow: hidden; font-size: 12pt; line-height: 1.3;
+        -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+      }
+      .category { padding: 1mm 2mm; }
+      .task-memo {
+        display: -webkit-box; min-height: 0; margin: 1.5mm 0;
+        overflow: hidden; font-size: 9pt; line-height: 1.25;
+        -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+      }
+      .scores { gap: 2mm; }
+      .score { padding: 1mm 2mm; font-size: 8pt; }
+      .score strong { font-size: 8pt; }
+      .task-footer { justify-content: flex-end; margin-top: 1mm; padding-top: 1mm; }
+      .print-status { display: inline; color: #344054; font-size: 9pt; }
+      .empty { padding: 10mm; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">✓</div>
+        <div>
+          <h1>ToDoリスト</h1>
+          <p class="subtitle">やることを整理して、ひとつずつ進めよう。</p>
+        </div>
+      </div>
+      <div class="actions">
+        <input class="file-input" id="import-file" type="file" accept=".xlsx,.xls,.csv">
+        <button class="button" id="import-button" type="button">Excelを読み込む</button>
+        <button class="button" id="export-button" type="button">Excelに書き出す</button>
+        <button class="button" id="pdf-button" type="button">PDF出力</button>
+        <button class="button primary" id="add-button" type="button">＋ ToDoを追加</button>
+      </div>
+    </header>
+
+    <section class="heading" aria-labelledby="list-heading">
+      <div>
+        <h2 id="list-heading">タスク一覧</h2>
+        <p>このブラウザーに自動保存されます。Excelの読み書きにはインターネット接続が必要です。</p>
+        <p class="print-caption" id="print-caption">優先度の高いタスク（最大5件）</p>
+      </div>
+      <span class="storage-note">この端末内に保存</span>
+    </section>
+
+    <div id="message" class="message hidden" role="status" aria-live="polite"></div>
+
+    <section class="toolbar" aria-label="タスクの検索と絞り込み">
+      <label class="search-wrap">
+        <span class="hidden">タスクを検索</span>
+        <input class="field-control search" id="search" type="search" placeholder="タスクやメモを検索">
+      </label>
+      <select class="field-control" id="status-filter" aria-label="進捗で絞り込み">
+        <option value="">すべての進捗</option>
+        <option value="未着手">1:未着手</option>
+        <option value="進行中">2:進行中</option>
+        <option value="完了">3:完了</option>
+        <option value="active">未着手および進行中</option>
+      </select>
+      <select class="field-control" id="sort" aria-label="並べ替え">
+        <option value="priority">緊急度・インパクト順</option>
+        <option value="urgency-5">緊急度が5のものをすべて表示</option>
+        <option value="impact">インパクト順</option>
+        <option value="difficulty">難易度が低い順</option>
+        <option value="title">タイトル順</option>
+      </select>
+      <select class="field-control" id="category-filter" aria-label="カテゴリで絞り込み">
+        <option value="">すべてのカテゴリ</option>
+      </select>
+    </section>
+    <p class="subtitle" id="suggestion-note">優先度の高い5件を表示します。ほかのタスクは検索や絞り込みで確認できます。</p>
+    <section class="task-list" id="task-list" aria-live="polite" aria-label="ToDo一覧"></section>
+  </main>
+
+  <dialog id="task-dialog" aria-labelledby="dialog-title">
+    <form id="task-form" class="dialog-inner">
+      <h2 id="dialog-title">ToDoを追加</h2>
+      <input id="task-id" type="hidden">
+      <div class="form-grid">
+        <label class="form-field full">タイトル
+          <input class="field-control" id="task-title" required maxlength="200" autocomplete="off">
+        </label>
+        <label class="form-field">カテゴリ
+          <input class="field-control" id="task-category" list="category-options" maxlength="100" placeholder="例：保育園">
+          <datalist id="category-options"></datalist>
+        </label>
+        <label class="form-field">進捗
+          <select class="field-control" id="task-status">
+            <option value="未着手">1:未着手</option>
+            <option value="進行中">2:進行中</option>
+            <option value="完了">3:完了</option>
+          </select>
+        </label>
+        <label class="form-field">緊急度（1〜5）
+          <select class="field-control" id="task-urgency"></select>
+        </label>
+        <label class="form-field">インパクト（1〜5）
+          <select class="field-control" id="task-impact"></select>
+        </label>
+        <label class="form-field">難易度（1〜5）
+          <select class="field-control" id="task-difficulty"></select>
+        </label>
+        <label class="form-field full">メモ
+          <textarea class="field-control" id="task-memo" maxlength="2000"></textarea>
+        </label>
+      </div>
+      <div class="dialog-actions">
+        <button class="button" id="cancel-dialog" type="button">キャンセル</button>
+        <button class="button primary" type="submit">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const STORAGE_KEY = "todo-list-app-v1";
+      const statuses = [
+        { value: "未着手", label: "1:未着手" },
+        { value: "進行中", label: "2:進行中" },
+        { value: "完了", label: "3:完了" }
+      ];
+      const state = { tasks: [] };
+      const byId = (id) => document.getElementById(id);
+      const list = byId("task-list");
+      const dialog = byId("task-dialog");
+      let messageTimer;
+
+      function makeId() {
+        return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      }
+
+      function normalizeStatus(value) {
+        const text = String(value ?? "").trim().toLowerCase().replace(/^\d+\s*[:：]\s*/, "");
+        if (["完了", "済", "done", "complete", "completed"].includes(text)) return "完了";
+        if (["進行中", "着手中", "doing", "in progress"].includes(text)) return "進行中";
+        return "未着手";
+      }
+
+      function statusLabel(value) {
+        const status = normalizeStatus(value);
+        return statuses.find((item) => item.value === status).label;
+      }
+
+      function normalizeScore(value) {
+        const number = Number(value);
+        return Number.isFinite(number) && number >= 1 && number <= 5 ? Math.round(number) : 3;
+      }
+
+      function saveTasks() {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state.tasks));
+        } catch (error) {
+          showMessage(`このブラウザーに保存できませんでした。空き容量やプライベートブラウズの設定を確認してください。(${error.message})`, "error");
+          return false;
+        }
+        return true;
+      }
+
+      function loadTasks() {
+        try {
+          const stored = localStorage.getItem(STORAGE_KEY);
+          if (!stored) return;
+          const tasks = JSON.parse(stored);
+          if (!Array.isArray(tasks)) throw new Error("保存データの形式が正しくありません。");
+          state.tasks = tasks.map((task) => ({ ...task, status: normalizeStatus(task.status) }));
+        } catch (error) {
+          showMessage(`保存済みデータを読み込めませんでした。Excelを読み込むと新しいデータとして保存できます。(${error.message})`, "error");
+        }
+      }
+
+      function showMessage(text, type = "success") {
+        const message = byId("message");
+        clearTimeout(messageTimer);
+        message.textContent = text;
+        message.className = `message ${type}`;
+        if (type === "success") {
+          messageTimer = setTimeout(() => message.classList.add("hidden"), 5000);
+        }
+      }
+
+      function addOption(select, value, label = value) {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        select.append(option);
+      }
+
+      function categories() {
+        return [...new Set(state.tasks.map((task) => task.category).filter(Boolean))]
+          .sort((a, b) => a.localeCompare(b, "ja"));
+      }
+
+      function refreshCategories() {
+        const filter = byId("category-filter");
+        const selected = filter.value;
+        filter.replaceChildren();
+        addOption(filter, "", "すべてのカテゴリ");
+        const datalist = byId("category-options");
+        datalist.replaceChildren();
+        categories().forEach((category) => {
+          addOption(filter, category);
+          addOption(datalist, category);
+        });
+        if ([...filter.options].some((option) => option.value === selected)) filter.value = selected;
+      }
+
+      function makeScore(label, value) {
+        const span = document.createElement("span");
+        span.className = "score";
+        span.append(document.createTextNode(`${label} `));
+        const strong = document.createElement("strong");
+        strong.textContent = `${value}/5`;
+        span.append(strong);
+        return span;
+      }
+
+      function makeStatusSelect(task) {
+        const select = document.createElement("select");
+        select.className = "field-control progress-select";
+        select.setAttribute("aria-label", `${task.title}の進捗`);
+        statuses.forEach((status) => addOption(select, status.value, status.label));
+        select.value = normalizeStatus(task.status);
+        select.addEventListener("change", () => {
+          task.status = select.value;
+          saveTasks();
+          render();
+        });
+        return select;
+      }
+
+      function openEditor(task) {
+        byId("task-form").reset();
+        byId("task-id").value = task?.id ?? "";
+        byId("dialog-title").textContent = task ? "ToDoを編集" : "ToDoを追加";
+        byId("task-title").value = task?.title ?? "";
+        byId("task-category").value = task?.category ?? "";
+        byId("task-status").value = normalizeStatus(task?.status);
+        byId("task-memo").value = task?.memo ?? "";
+        ["urgency", "impact", "difficulty"].forEach((key) => {
+          byId(`task-${key}`).value = String(normalizeScore(task?.[key]));
+        });
+        refreshCategories();
+        dialog.showModal();
+        byId("task-title").focus();
+      }
+
+      function filteredTasks() {
+        const query = byId("search").value.trim().toLocaleLowerCase("ja");
+        const category = byId("category-filter").value;
+        const status = byId("status-filter").value;
+        const sort = byId("sort").value;
+        const tasks = state.tasks.filter((task) => {
+          const matchesQuery = !query || `${task.title} ${task.memo} ${task.category}`.toLocaleLowerCase("ja").includes(query);
+          const taskStatus = normalizeStatus(task.status);
+          const matchesStatus = !status
+            || (status === "active" ? taskStatus !== "完了" : taskStatus === status);
+          return matchesQuery && (!category || task.category === category) && matchesStatus;
+        });
+        const priorityOrder = (a, b) =>
+          b.urgency - a.urgency || b.impact - a.impact || a.difficulty - b.difficulty;
+        tasks.sort(priorityOrder);
+        const displayTasks = sort === "urgency-5"
+          ? tasks.filter((task) => Number(task.urgency) === 5)
+          : tasks.slice(0, 5);
+        const topTasks = displayTasks;
+        topTasks.sort((a, b) => {
+          if (sort === "urgency-5") return priorityOrder(a, b);
+          if (sort === "impact") return b.impact - a.impact || priorityOrder(a, b);
+          if (sort === "difficulty") return a.difficulty - b.difficulty || priorityOrder(a, b);
+          if (sort === "title") return a.title.localeCompare(b.title, "ja");
+          return priorityOrder(a, b);
+        });
+        return topTasks;
+      }
+
+      function render() {
+        refreshCategories();
+        const allUrgencyFive = byId("sort").value === "urgency-5";
+        byId("suggestion-note").textContent = allUrgencyFive
+          ? "緊急度が5のタスクをすべて表示しています。"
+          : "優先度の高い5件を表示します。ほかのタスクは検索や絞り込みで確認できます。";
+        byId("print-caption").textContent = allUrgencyFive
+          ? "緊急度が5のタスク（すべて）"
+          : "優先度の高いタスク（最大5件）";
+        list.replaceChildren();
+        const tasks = filteredTasks();
+        if (!tasks.length) {
+          const empty = document.createElement("div");
+          empty.className = "empty";
+          const title = document.createElement("strong");
+          title.textContent = state.tasks.length ? "条件に合うToDoがありません" : "ToDoはまだありません";
+          const detail = document.createElement("span");
+          detail.textContent = state.tasks.length ? "検索や絞り込み条件を変更してください。" : "Excelを読み込むか、「ToDoを追加」から始めましょう。";
+          empty.append(title, detail);
+          list.append(empty);
+          return;
+        }
+
+        tasks.forEach((task) => {
+          const card = document.createElement("article");
+          card.className = "task-card";
+          const top = document.createElement("div");
+          top.className = "task-top";
+          const title = document.createElement("h3");
+          title.className = "task-title";
+          title.textContent = task.title;
+          top.append(title);
+          if (task.category) {
+            const category = document.createElement("span");
+            category.className = "category";
+            category.textContent = task.category;
+            top.append(category);
+          }
+          const memo = document.createElement("p");
+          memo.className = "task-memo";
+          memo.textContent = task.memo || "メモなし";
+          const scores = document.createElement("div");
+          scores.className = "scores";
+          scores.append(
+            makeScore("緊急度", task.urgency),
+            makeScore("インパクト", task.impact),
+            makeScore("難易度", task.difficulty)
+          );
+          const footer = document.createElement("div");
+          footer.className = "task-footer";
+          footer.append(makeStatusSelect(task));
+          const printStatus = document.createElement("span");
+          printStatus.className = "print-status";
+          printStatus.textContent = `進捗：${statusLabel(task.status)}`;
+          footer.append(printStatus);
+          const actions = document.createElement("div");
+          actions.className = "card-actions";
+          const edit = document.createElement("button");
+          edit.className = "text-button";
+          edit.type = "button";
+          edit.textContent = "編集";
+          edit.addEventListener("click", () => openEditor(task));
+          const remove = document.createElement("button");
+          remove.className = "text-button danger";
+          remove.type = "button";
+          remove.textContent = "削除";
+          remove.addEventListener("click", () => {
+            if (!window.confirm(`「${task.title}」を削除しますか？`)) return;
+            state.tasks = state.tasks.filter((item) => item.id !== task.id);
+            saveTasks();
+            render();
+            showMessage("ToDoを削除しました。");
+          });
+          actions.append(edit, remove);
+          footer.append(actions);
+          card.append(top, memo, scores, footer);
+          list.append(card);
+        });
+      }
+
+      function headerIndex(headers, name) {
+        return headers.findIndex((header) => String(header ?? "").trim() === name);
+      }
+
+      function parseWorkbook(workbook) {
+        const tasks = [];
+        for (const sheetName of workbook.SheetNames) {
+          const sheet = workbook.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+          const headerRow = rows.findIndex((row) => row.some((cell) => String(cell).trim() === "タイトル"));
+          if (headerRow < 0) continue;
+          const headers = rows[headerRow];
+          const titleIndex = headerIndex(headers, "タイトル");
+          const urgencyIndex = headerIndex(headers, "緊急度");
+          const impactIndex = headerIndex(headers, "インパクト");
+          const difficultyIndex = headerIndex(headers, "難易度");
+          const memoIndex = headerIndex(headers, "メモ");
+          const statusIndex = headerIndex(headers, "進捗");
+          for (const row of rows.slice(headerRow + 1)) {
+            const title = String(row[titleIndex] ?? "").trim();
+            if (!title) continue;
+            tasks.push({
+              id: makeId(),
+              title,
+              category: sheetName,
+              urgency: normalizeScore(row[urgencyIndex]),
+              impact: normalizeScore(row[impactIndex]),
+              difficulty: normalizeScore(row[difficultyIndex]),
+              memo: String(row[memoIndex] ?? ""),
+              status: normalizeStatus(row[statusIndex])
+            });
+          }
+        }
+        return tasks;
+      }
+
+      async function importWorkbook(file) {
+        if (!window.XLSX) throw new Error("Excel読み込み機能を準備できません。インターネット接続を確認して再読み込みしてください。");
+        const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
+        const imported = parseWorkbook(workbook);
+        if (!imported.length) throw new Error("「タイトル」列のあるシートが見つかりませんでした。");
+        const currentCount = state.tasks.length;
+        const prompt = currentCount
+          ? `${imported.length}件のToDoを読み込みます。現在の${currentCount}件を置き換えてよろしいですか？`
+          : `${imported.length}件のToDoを読み込みます。よろしいですか？`;
+        if (!window.confirm(prompt)) return;
+        state.tasks = imported;
+        if (!saveTasks()) return;
+        render();
+        showMessage(`${imported.length}件のToDoを読み込みました。`);
+      }
+
+      function safeSheetName(name, used) {
+        let base = (name || "ToDo").replace(/[\\/?*:[\]]/g, " ").trim().slice(0, 31) || "ToDo";
+        let candidate = base;
+        let suffix = 2;
+        while (used.has(candidate.toLocaleLowerCase())) {
+          const tail = ` (${suffix++})`;
+          candidate = `${base.slice(0, 31 - tail.length)}${tail}`;
+        }
+        used.add(candidate.toLocaleLowerCase());
+        return candidate;
+      }
+
+      function exportWorkbook() {
+        if (!window.XLSX) {
+          showMessage("Excel書き出し機能を準備できません。インターネット接続を確認して再読み込みしてください。", "error");
+          return;
+        }
+        if (!state.tasks.length) {
+          showMessage("書き出すToDoがありません。", "error");
+          return;
+        }
+        const workbook = XLSX.utils.book_new();
+        const groups = new Map();
+        state.tasks.forEach((task) => {
+          const category = task.category || "未分類";
+          if (!groups.has(category)) groups.set(category, []);
+          groups.get(category).push(task);
+        });
+        const used = new Set();
+        for (const [category, tasks] of groups) {
+          const rows = [["タイトル", "緊急度", "インパクト", "難易度", "メモ", "進捗"]];
+          tasks.forEach((task) => rows.push([
+            task.title, task.urgency, task.impact, task.difficulty, task.memo, statusLabel(task.status)
+          ]));
+          const sheet = XLSX.utils.aoa_to_sheet(rows);
+          sheet["!cols"] = [{ wch: 32 }, { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 42 }, { wch: 12 }];
+          XLSX.utils.book_append_sheet(workbook, sheet, safeSheetName(category, used));
+        }
+        XLSX.writeFile(workbook, "ToDoリスト.xlsx");
+        showMessage("ToDoリスト.xlsx を書き出しました。");
+      }
+
+      byId("import-button").addEventListener("click", () => byId("import-file").click());
+      byId("import-file").addEventListener("change", async (event) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        try {
+          await importWorkbook(file);
+        } catch (error) {
+          showMessage(`Excelを読み込めませんでした。ファイル形式を確認してください。(${error.message})`, "error");
+        } finally {
+          event.target.value = "";
+        }
+      });
+      byId("export-button").addEventListener("click", exportWorkbook);
+      byId("pdf-button").addEventListener("click", () => {
+        if (!filteredTasks().length) {
+          showMessage("PDFに出力するタスクがありません。", "error");
+          return;
+        }
+        window.print();
+      });
+      byId("add-button").addEventListener("click", () => openEditor());
+      byId("cancel-dialog").addEventListener("click", () => dialog.close());
+      byId("task-form").addEventListener("submit", (event) => {
+        event.preventDefault();
+        const id = byId("task-id").value;
+        const task = {
+          id: id || makeId(),
+          title: byId("task-title").value.trim(),
+          category: byId("task-category").value.trim(),
+          status: normalizeStatus(byId("task-status").value),
+          urgency: normalizeScore(byId("task-urgency").value),
+          impact: normalizeScore(byId("task-impact").value),
+          difficulty: normalizeScore(byId("task-difficulty").value),
+          memo: byId("task-memo").value.trim()
+        };
+        if (id) {
+          const index = state.tasks.findIndex((item) => item.id === id);
+          if (index < 0) {
+            showMessage("編集対象のToDoが見つかりません。", "error");
+            dialog.close();
+            return;
+          }
+          state.tasks[index] = task;
+        } else {
+          state.tasks.push(task);
+        }
+        if (!saveTasks()) return;
+        dialog.close();
+        render();
+        showMessage(id ? "ToDoを更新しました。" : "ToDoを追加しました。");
+      });
+      ["search", "category-filter", "status-filter", "sort"].forEach((id) => {
+        byId(id).addEventListener(id === "search" ? "input" : "change", render);
+      });
+      ["urgency", "impact", "difficulty"].forEach((key) => {
+        const select = byId(`task-${key}`);
+        for (let score = 1; score <= 5; score += 1) addOption(select, String(score));
+      });
+
+      loadTasks();
+      render();
+    })();
+  </script>
+</body>
+</html>
