@@ -64,6 +64,9 @@
       background: #fff; color: #344054;
     }
     .toolbar select { width: auto; min-width: 145px; }
+    .count-tabs { display: flex; align-items: center; gap: 4px; padding: 3px; border: 1px solid var(--line); border-radius: 9px; background: #f7f9fc; }
+    .count-tab { min-height: 32px; padding: 0 11px; border: 0; border-radius: 6px; background: transparent; color: #596579; font-size: 12px; font-weight: 650; }
+    .count-tab[aria-pressed="true"] { background: #fff; color: var(--primary); box-shadow: 0 1px 4px #20304a1a; }
     .task-list { display: grid; grid-template-columns: 1fr; gap: 14px; }
     .task-card { min-width: 0; padding: 19px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: 0 2px 7px #20304a08; }
     .task-top { align-items: start; }
@@ -107,6 +110,7 @@
       .toolbar { flex-wrap: wrap; }
       .search-wrap { flex-basis: 100%; }
       .toolbar select { flex: 1; min-width: 0; }
+      .count-tabs { flex: 1; justify-content: center; }
     }
     @media (max-width: 420px) {
       .brand-mark { width: 38px; height: 38px; }
@@ -190,18 +194,16 @@
         <option value="完了">3:完了</option>
         <option value="active">未着手および進行中</option>
       </select>
-      <select class="field-control" id="sort" aria-label="並べ替え">
-        <option value="priority">緊急度・インパクト順</option>
-        <option value="urgency-5">緊急度が5のものをすべて表示</option>
-        <option value="impact">インパクト順</option>
-        <option value="difficulty">難易度が低い順</option>
-        <option value="title">タイトル順</option>
-      </select>
+      <div class="count-tabs" role="group" aria-label="表示件数">
+        <button class="count-tab" type="button" data-count="5" aria-pressed="true">5件</button>
+        <button class="count-tab" type="button" data-count="10" aria-pressed="false">10件</button>
+        <button class="count-tab" type="button" data-count="all" aria-pressed="false">全て</button>
+      </div>
       <select class="field-control" id="category-filter" aria-label="カテゴリで絞り込み">
         <option value="">すべてのカテゴリ</option>
       </select>
     </section>
-    <p class="subtitle" id="suggestion-note">優先度の高い5件を表示します。ほかのタスクは検索や絞り込みで確認できます。</p>
+    <p class="subtitle" id="suggestion-note">5件を表示しています。</p>
     <section class="task-list" id="task-list" aria-live="polite" aria-label="ToDo一覧"></section>
   </main>
 
@@ -254,7 +256,7 @@
         { value: "進行中", label: "2:進行中" },
         { value: "完了", label: "3:完了" }
       ];
-      const state = { tasks: [] };
+      const state = { tasks: [], displayCount: "5" };
       const byId = (id) => document.getElementById(id);
       const list = byId("task-list");
       const dialog = byId("task-dialog");
@@ -383,7 +385,6 @@
         const query = byId("search").value.trim().toLocaleLowerCase("ja");
         const category = byId("category-filter").value;
         const status = byId("status-filter").value;
-        const sort = byId("sort").value;
         const tasks = state.tasks.filter((task) => {
           const matchesQuery = !query || `${task.title} ${task.memo} ${task.category}`.toLocaleLowerCase("ja").includes(query);
           const taskStatus = normalizeStatus(task.status);
@@ -391,32 +392,21 @@
             || (status === "active" ? taskStatus !== "完了" : taskStatus === status);
           return matchesQuery && (!category || task.category === category) && matchesStatus;
         });
-        const priorityOrder = (a, b) =>
-          b.urgency - a.urgency || b.impact - a.impact || a.difficulty - b.difficulty;
-        tasks.sort(priorityOrder);
-        const displayTasks = sort === "urgency-5"
-          ? tasks.filter((task) => Number(task.urgency) === 5)
-          : tasks.slice(0, 5);
-        const topTasks = displayTasks;
-        topTasks.sort((a, b) => {
-          if (sort === "urgency-5") return priorityOrder(a, b);
-          if (sort === "impact") return b.impact - a.impact || priorityOrder(a, b);
-          if (sort === "difficulty") return a.difficulty - b.difficulty || priorityOrder(a, b);
-          if (sort === "title") return a.title.localeCompare(b.title, "ja");
-          return priorityOrder(a, b);
-        });
-        return topTasks;
+        tasks.sort((a, b) =>
+          Number(b.urgency) - Number(a.urgency)
+          || Number(b.impact) - Number(a.impact)
+          || Number(a.difficulty) - Number(b.difficulty)
+        );
+        return state.displayCount === "all"
+          ? tasks
+          : tasks.slice(0, Number(state.displayCount));
       }
 
       function render() {
         refreshCategories();
-        const allUrgencyFive = byId("sort").value === "urgency-5";
-        byId("suggestion-note").textContent = allUrgencyFive
-          ? "緊急度が5のタスクをすべて表示しています。"
-          : "優先度の高い5件を表示します。ほかのタスクは検索や絞り込みで確認できます。";
-        byId("print-caption").textContent = allUrgencyFive
-          ? "緊急度が5のタスク（すべて）"
-          : "優先度の高いタスク（最大5件）";
+        const countLabel = state.displayCount === "all" ? "全て" : `${state.displayCount}件`;
+        byId("suggestion-note").textContent = `${countLabel}を表示しています。`;
+        byId("print-caption").textContent = `タスク一覧（${countLabel}）`;
         list.replaceChildren();
         const tasks = filteredTasks();
         if (!tasks.length) {
@@ -633,7 +623,16 @@
         render();
         showMessage(id ? "ToDoを更新しました。" : "ToDoを追加しました。");
       });
-      ["search", "category-filter", "status-filter", "sort"].forEach((id) => {
+      document.querySelectorAll(".count-tab").forEach((button) => {
+        button.addEventListener("click", () => {
+          state.displayCount = button.dataset.count;
+          document.querySelectorAll(".count-tab").forEach((tab) => {
+            tab.setAttribute("aria-pressed", String(tab === button));
+          });
+          render();
+        });
+      });
+      ["search", "category-filter", "status-filter"].forEach((id) => {
         byId(id).addEventListener(id === "search" ? "input" : "change", render);
       });
       ["urgency", "impact", "difficulty"].forEach((key) => {
