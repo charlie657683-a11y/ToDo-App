@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f7fb">
+  <title>ToDoリスト | 優先タスク</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
+      color: #202938;
+      background: #f5f7fb;
+      --muted: #697586;
+      --line: #e5eaf1;
+      --primary: #315bd6;
+      --surface: #fff;
+    }
+
+    * { box-sizing: border-box; }
+    body { min-width: 320px; margin: 0; }
+    button, select { font: inherit; }
+    button { cursor: pointer; }
+    .app { width: min(1120px, calc(100% - 40px)); margin: 0 auto; padding: 38px 0 56px; }
+    .topbar, .brand, .actions { display: flex; align-items: center; }
+    .topbar { justify-content: space-between; gap: 20px; }
+    .brand { gap: 13px; }
+    .brand-mark {
+      display: grid; width: 44px; height: 44px; place-items: center; border-radius: 14px;
+      background: var(--primary); color: #fff; font-size: 23px; font-weight: 700;
+    }
+    h1 { margin: 0; font-size: 22px; }
+    .subtitle { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
+    .actions { flex-wrap: wrap; justify-content: end; gap: 9px; }
+    .button {
+      display: inline-flex; min-height: 40px; align-items: center; justify-content: center;
+      padding: 0 14px; border: 1px solid var(--line); border-radius: 9px;
+      background: var(--surface); color: #344054; font-weight: 650;
+    }
+    .button:hover { background: #f7f9fc; border-color: #cbd4e1; }
+    .button.primary { border-color: var(--primary); background: var(--primary); color: #fff; }
+    .button.primary:hover { background: #2448b5; }
+    button:focus-visible, select:focus-visible { outline: 3px solid #315bd64d; outline-offset: 2px; }
+    .heading { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin: 40px 0 20px; }
+    .heading h2 { margin: 0; font-size: 24px; }
+    .heading p { margin: 7px 0 0; color: var(--muted); font-size: 13px; }
+    .storage-note { color: #677386; font-size: 12px; white-space: nowrap; }
+    .storage-note::before {
+      display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%;
+      background: #28a879; content: "";
+    }
+    .message { margin: 16px 0; padding: 12px 15px; border-radius: 9px; font-size: 13px; }
+    .message.error { border: 1px solid #f2c7c7; background: #fff3f3; color: #a32929; }
+    .message.success { border: 1px solid #b8e5cf; background: #effaf4; color: #176b42; }
+    .hidden { display: none !important; }
+    .section { margin-top: 28px; }
+    .section-heading { display: flex; align-items: baseline; gap: 10px; margin-bottom: 11px; }
+    .section-heading h3 { margin: 0; font-size: 18px; }
+    .section-description { color: var(--muted); font-size: 12px; }
+    .table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); }
+    table { width: 100%; min-width: 720px; border-collapse: collapse; table-layout: fixed; }
+    th, td { padding: 12px 14px; overflow: hidden; border-bottom: 1px solid #edf0f4; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+    th { background: #f8f9fb; color: #647084; font-size: 11px; font-weight: 700; }
+    td { font-size: 13px; }
+    tr:last-child td { border-bottom: 0; }
+    th:first-child { width: 27%; }
+    th:nth-child(2) { width: 43%; }
+    th:nth-child(3) { width: 16%; }
+    th:nth-child(4) { width: 14%; }
+    .task-name { color: #202938; font-weight: 650; }
+    .task-memo { color: #596579; }
+    .task-category {
+      display: inline-block; max-width: 100%; overflow: hidden; padding: 4px 8px; border-radius: 99px;
+      background: #edf2ff; color: #3156b9; text-overflow: ellipsis; vertical-align: middle;
+    }
+    .status-select { width: 100%; min-height: 34px; padding: 5px 8px; border: 1px solid #dce2eb; border-radius: 7px; background: #fff; color: #344054; font-size: 12px; }
+    .empty { padding: 22px 14px; color: var(--muted); text-align: center; font-size: 13px; }
+    .file-input { display: none; }
+    @media (max-width: 700px) {
+      .app { width: min(100% - 28px, 600px); padding-top: 22px; }
+      .topbar, .heading { align-items: start; flex-wrap: wrap; }
+      .topbar { flex-direction: column; }
+      .actions { width: 100%; justify-content: stretch; }
+      .actions .button { flex: 1; padding: 0 9px; }
+      .heading { margin-top: 30px; }
+      .storage-note { white-space: normal; }
+      .section { margin-top: 23px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">✓</div>
+        <div>
+          <h1>ToDoリスト</h1>
+          <p class="subtitle">優先タスクを確認して、次の一歩へ。</p>
+        </div>
+      </div>
+      <div class="actions">
+        <input class="file-input" id="import-file" type="file" accept=".xlsx,.xls,.csv">
+        <button class="button" id="import-button" type="button">Excelを読み込む</button>
+        <button class="button" id="export-button" type="button">Excelに書き出す</button>
+      </div>
+    </header>
+
+    <section class="heading" aria-labelledby="list-heading">
+      <div>
+        <h2 id="list-heading">優先タスク</h2>
+        <p>Excelから読み込んだタスクは、このブラウザーにも自動保存されます。</p>
+      </div>
+      <span class="storage-note">この端末内に保存</span>
+    </section>
+
+    <div id="message" class="message hidden" role="status" aria-live="polite"></div>
+    <div id="task-sections" aria-live="polite"></div>
+  </main>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const STORAGE_KEY = "todo-list-priority-view-v2";
+      const state = { tasks: [] };
+      const byId = (id) => document.getElementById(id);
+      let messageTimer;
+
+      function makeId() {
+        return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      }
+
+      function normalizeStatus(value) {
+        const text = String(value ?? "").trim().toLowerCase().replace(/^\d+\s*[:：]\s*/, "");
+        if (["2", "進行中", "着手中", "doing", "in progress"].includes(text)) return "進行中";
+        if (["3", "完了", "済", "done", "complete", "completed"].includes(text)) return "完了";
+        return "未実施";
+      }
+
+      function normalizeScore(value) {
+        const number = Number(value);
+        return Number.isFinite(number) && number >= 1 && number <= 5 ? Math.round(number) : 3;
+      }
+
+      function showMessage(text, type = "success") {
+        const message = byId("message");
+        clearTimeout(messageTimer);
+        message.textContent = text;
+        message.className = `message ${type}`;
+        if (type === "success") {
+          messageTimer = setTimeout(() => message.classList.add("hidden"), 5000);
+        }
+      }
+
+      function saveTasks() {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state.tasks));
+          return true;
+        } catch (error) {
+          showMessage(`このブラウザーに保存できませんでした。空き容量やプライベートブラウズの設定を確認してください。(${error.message})`, "error");
+          return false;
+        }
+      }
+
+      function loadTasks() {
+        try {
+          const stored = localStorage.getItem(STORAGE_KEY);
+          if (!stored) return;
+          const tasks = JSON.parse(stored);
+          if (!Array.isArray(tasks)) throw new Error("保存データの形式が正しくありません。");
+          state.tasks = tasks.map((task) => ({ ...task, status: normalizeStatus(task.status) }));
+        } catch (error) {
+          showMessage(`保存済みデータを読み込めませんでした。Excelを読み込むと新しいデータとして保存できます。(${error.message})`, "error");
+        }
+      }
+
+      function comparePriority(a, b) {
+        return Number(b.urgency) - Number(a.urgency)
+          || Number(b.impact) - Number(a.impact)
+          || Number(a.difficulty) - Number(b.difficulty)
+          || a.title.localeCompare(b.title, "ja");
+      }
+
+      function selectedTasks(status) {
+        const candidates = state.tasks.filter((task) => normalizeStatus(task.status) === status);
+        const urgent = candidates.filter((task) => task.urgency >= 4);
+        const additional = candidates
+          .filter((task) => task.urgency === 3)
+          .sort((a, b) => Number(b.impact) - Number(a.impact)
+            || Number(a.difficulty) - Number(b.difficulty)
+            || a.title.localeCompare(b.title, "ja"))
+          .slice(0, 3);
+        return [...urgent, ...additional].sort(comparePriority);
+      }
+
+      function makeStatusSelect(task) {
+        const select = document.createElement("select");
+        select.className = "status-select";
+        select.setAttribute("aria-label", `${task.title}の進捗度`);
+        [
+          ["未実施", "1:未実施"],
+          ["進行中", "2:進行中"],
+          ["完了", "3:完了"]
+        ].forEach(([value, label]) => {
+          const option = document.createElement("option");
+          option.value = value;
+          option.textContent = label;
+          select.append(option);
+        });
+        select.value = normalizeStatus(task.status);
+        select.addEventListener("change", () => {
+          const previousStatus = task.status;
+          task.status = select.value;
+          if (!saveTasks()) {
+            task.status = previousStatus;
+            select.value = normalizeStatus(previousStatus);
+            return;
+          }
+          render();
+        });
+        return select;
+      }
+
+      function makeCell(text, className) {
+        const cell = document.createElement("td");
+        const content = document.createElement("span");
+        content.className = className;
+        content.textContent = text;
+        content.title = text;
+        cell.append(content);
+        return cell;
+      }
+
+      function renderSection(container, status, title, description) {
+        const section = document.createElement("section");
+        section.className = "section";
+        const heading = document.createElement("div");
+        heading.className = "section-heading";
+        const headingText = document.createElement("h3");
+        headingText.textContent = title;
+        const detail = document.createElement("span");
+        detail.className = "section-description";
+        detail.textContent = description;
+        heading.append(headingText, detail);
+
+        const scroll = document.createElement("div");
+        scroll.className = "table-scroll";
+        const table = document.createElement("table");
+        const thead = document.createElement("thead");
+        const headerRow = document.createElement("tr");
+        ["タスク", "メモ", "カテゴリー", "進捗度"].forEach((label) => {
+          const header = document.createElement("th");
+          header.scope = "col";
+          header.textContent = label;
+          headerRow.append(header);
+        });
+        thead.append(headerRow);
+        table.append(thead);
+
+        const tbody = document.createElement("tbody");
+        const tasks = selectedTasks(status);
+        tasks.forEach((task) => {
+          const row = document.createElement("tr");
+          row.append(
+            makeCell(task.title, "task-name"),
+            makeCell(task.memo || "メモなし", "task-memo")
+          );
+          const categoryCell = document.createElement("td");
+          const category = document.createElement("span");
+          category.className = "task-category";
+          category.textContent = task.category || "未分類";
+          category.title = category.textContent;
+          categoryCell.append(category);
+          row.append(categoryCell);
+          const statusCell = document.createElement("td");
+          statusCell.append(makeStatusSelect(task));
+          row.append(statusCell);
+          tbody.append(row);
+        });
+
+        if (!tasks.length) {
+          const row = document.createElement("tr");
+          const cell = document.createElement("td");
+          cell.className = "empty";
+          cell.colSpan = 4;
+          cell.textContent = state.tasks.length
+            ? "表示対象のタスクはありません。"
+            : "Excelを読み込むと、ここに優先タスクが表示されます。";
+          row.append(cell);
+          tbody.append(row);
+        }
+        table.append(tbody);
+        scroll.append(table);
+        section.append(heading, scroll);
+        container.append(section);
+      }
+
+      function render() {
+        const container = byId("task-sections");
+        container.replaceChildren();
+        renderSection(container, "未実施", "未実施", "緊急度4以上はすべて表示。緊急度3からインパクト・難易度順に最大3件を表示。");
+        renderSection(container, "進行中", "進行中", "緊急度4以上はすべて表示。緊急度3からインパクト・難易度順に最大3件を表示。");
+      }
+
+      function headerIndex(headers, name) {
+        return headers.findIndex((header) => String(header ?? "").trim() === name);
+      }
+
+      function parseWorkbook(workbook) {
+        const tasks = [];
+        for (const sheetName of workbook.SheetNames) {
+          const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: "" });
+          const headerRow = rows.findIndex((row) => row.some((cell) => String(cell).trim() === "タイトル"));
+          if (headerRow < 0) continue;
+          const headers = rows[headerRow];
+          const titleIndex = headerIndex(headers, "タイトル");
+          const urgencyIndex = headerIndex(headers, "緊急度");
+          const impactIndex = headerIndex(headers, "インパクト");
+          const difficultyIndex = headerIndex(headers, "難易度");
+          const memoIndex = headerIndex(headers, "メモ");
+          const statusIndex = headerIndex(headers, "進捗");
+          for (const row of rows.slice(headerRow + 1)) {
+            const title = String(row[titleIndex] ?? "").trim();
+            if (!title) continue;
+            tasks.push({
+              id: makeId(),
+              title,
+              category: sheetName,
+              urgency: normalizeScore(row[urgencyIndex]),
+              impact: normalizeScore(row[impactIndex]),
+              difficulty: normalizeScore(row[difficultyIndex]),
+              memo: String(row[memoIndex] ?? "").trim(),
+              status: normalizeStatus(row[statusIndex])
+            });
+          }
+        }
+        return tasks;
+      }
+
+      async function importWorkbook(file) {
+        if (!window.XLSX) {
+          throw new Error("Excel読み込み機能を準備できません。インターネット接続を確認して再読み込みしてください。");
+        }
+        const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
+        const imported = parseWorkbook(workbook);
+        if (!imported.length) throw new Error("「タイトル」列のあるシートが見つかりませんでした。");
+        if (state.tasks.length && !window.confirm(`${imported.length}件を読み込み、現在の${state.tasks.length}件を置き換えますか？`)) return;
+        const previousTasks = state.tasks;
+        state.tasks = imported;
+        if (!saveTasks()) {
+          state.tasks = previousTasks;
+          return;
+        }
+        render();
+        showMessage(`${imported.length}件を読み込みました。`);
+      }
+
+      function exportWorkbook() {
+        if (!window.XLSX) {
+          showMessage("Excel書き出し機能を準備できません。インターネット接続を確認して再読み込みしてください。", "error");
+          return;
+        }
+        if (!state.tasks.length) {
+          showMessage("書き出すタスクがありません。", "error");
+          return;
+        }
+        const workbook = XLSX.utils.book_new();
+        const groups = new Map();
+        state.tasks.forEach((task) => {
+          const category = task.category || "未分類";
+          if (!groups.has(category)) groups.set(category, []);
+          groups.get(category).push(task);
+        });
+        const usedSheetNames = new Set();
+        for (const [category, tasks] of groups) {
+          const rows = [["タイトル", "緊急度", "インパクト", "難易度", "メモ", "進捗"]];
+          tasks.forEach((task) => rows.push([
+            task.title, task.urgency, task.impact, task.difficulty, task.memo, normalizeStatus(task.status)
+          ]));
+          let base = category.replace(/[\\/?*:[\]]/g, " ").trim().slice(0, 31) || "ToDo";
+          let sheetName = base;
+          let suffix = 2;
+          while (usedSheetNames.has(sheetName.toLocaleLowerCase())) {
+            const tail = ` (${suffix++})`;
+            sheetName = `${base.slice(0, 31 - tail.length)}${tail}`;
+          }
+          usedSheetNames.add(sheetName.toLocaleLowerCase());
+          XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), sheetName);
+        }
+        XLSX.writeFile(workbook, "ToDoリスト.xlsx");
+        showMessage("ToDoリスト.xlsx を書き出しました。");
+      }
+
+      byId("import-button").addEventListener("click", () => byId("import-file").click());
+      byId("import-file").addEventListener("change", async (event) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        try {
+          await importWorkbook(file);
+        } catch (error) {
+          showMessage(`Excelを読み込めませんでした。ファイル形式を確認してください。(${error.message})`, "error");
+        } finally {
+          event.target.value = "";
+        }
+      });
+      byId("export-button").addEventListener("click", exportWorkbook);
+
+      loadTasks();
+      render();
+    })();
+  </script>
+</body>
+</html>
